@@ -123,6 +123,26 @@ html.dark .icon-value {
     padding: 2px 0 0;
 }
 
+#resultCard .result-value-panel + .result-divider {
+    transform: translateY(0.25rem);
+}
+
+#resultCard .result-days-panel {
+    transform: translateY(0.25rem);
+}
+
+#resultCard .quote-divider {
+    transform: translateY(0.3125rem);
+}
+
+#resultCard .quote-panel {
+    transform: translateY(0.3125rem);
+}
+
+#resultCard .result-value-panel {
+    margin-bottom: 0.4rem;
+}
+
 .quote-icon {
     color: #94a3b8;
 }
@@ -481,7 +501,26 @@ html.dark #captureRoot.exporting {
 }
 
 @media (min-width: 768px) {
+    #resultCard .result-summary {
+        transform: translateY(-0.075rem);
+    }
+
+    #resultCard .result-value-panel + .result-divider,
+    #resultCard .result-days-panel {
+        transform: translateY(-0.225rem);
+    }
+
+    #resultCard .quote-divider,
+    #resultCard .quote-panel {
+        transform: translateY(-0.1rem);
+    }
+
+    #resultCard .quote-panel {
+        transform: translateY(0.275rem);
+    }
+
     #resultCard .result-value-panel {
+        margin-bottom: 0.6rem;
         padding-top: 2px;
         padding-bottom: 2px;
     }
@@ -502,12 +541,24 @@ html.dark #captureRoot.exporting {
     }
 
     #finalValue.final-value-long {
-        font-size: 50px;
+        font-size: 54px;
+    }
+
+    #resultCard .result-amount-row.final-value-row-long > span:not(#finalValue) {
+        transform: translateY(-7.33px);
     }
 
 }
 
 @media (max-width: 767px) {
+    #resultCard .result-value-panel {
+        margin-bottom: 0.15rem;
+    }
+
+    #resultCard .quote-panel {
+        margin-bottom: 0.625rem;
+    }
+
     #mainCard.exporting #resultCard {
         padding-bottom: 16px;
     }

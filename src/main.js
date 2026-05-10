@@ -733,7 +733,9 @@ function calculate() {
 function setFinalValueDisplay(value) {
     els.finalValue.textContent = value;
     const numericLength = value.replace(/[^0-9]/g, '').length;
-    els.finalValue.classList.toggle('final-value-long', numericLength >= 7);
+    const isLongValue = numericLength >= 7;
+    els.finalValue.classList.toggle('final-value-long', isLongValue);
+    els.finalValue.closest('.result-amount-row')?.classList.toggle('final-value-row-long', isLongValue);
 }
 
 function copyResult() {
