@@ -36,6 +36,8 @@ const els = {
     symbolDisplay: document.querySelector('.symbol-display'),
     finalValue: document.getElementById('finalValue'),
     originalCurrencyValue: document.getElementById('originalCurrencyValue'),
+    premiumInput: document.getElementById('premiumInput'),
+    salePriceInput: document.getElementById('salePriceInput'),
     daysRemaining: document.getElementById('daysRemaining'),
     progressBar: document.getElementById('progressBar'),
     progressText: document.getElementById('progressText'),
@@ -47,10 +49,13 @@ const els = {
 };
 
 let rateLimitTimer = null;
+let remainingValueCNY = 0;
+let quoteLastEdited = 'premium';
 
 window.addEventListener('DOMContentLoaded', () => {
     initTheme();
     loadInputsFromCookie(); 
+    initQuoteFields();
     initDates(); 
     syncDateDisplay(els.dueDate);
     syncDateDisplay(els.tradeDate);
@@ -88,6 +93,19 @@ function setupEventListeners() {
 
     els.refreshBtn.addEventListener('click', manualRefreshRate); 
     els.themeToggle.addEventListener('click', toggleTheme);
+
+    [els.premiumInput, els.salePriceInput].forEach(el => {
+        el.addEventListener('input', () => {
+            quoteLastEdited = el === els.salePriceInput ? 'sale' : 'premium';
+            syncQuoteFields();
+            debouncedSave();
+        });
+
+        el.addEventListener('blur', () => {
+            syncQuoteFields({ formatActive: true });
+            saveInputsToCookie();
+        });
+    });
 
     // Firefox：date input 改为 visibility:hidden，不接收点击 → 在 wrapper 上绑定点击来触发 showPicker()
     // 非 Firefox：原生透明日历指示器在 webkit 上会自己响应点击，同时下面的 icon handler 作为后备
@@ -133,6 +151,9 @@ function setupEventListeners() {
         validateNumberInput(el);
     });
 
+    els.salePriceInput.addEventListener('input', () => validateNumberInput(els.salePriceInput));
+    validateNumberInput(els.salePriceInput);
+
     // ESC 关闭模态 / 限流提示
     document.addEventListener('keydown', (e) => {
         if (e.key !== 'Escape') return;
@@ -151,6 +172,74 @@ function validateNumberInput(el) {
     const ok = Number.isFinite(v) && v >= 0;
     el.classList.toggle('input-invalid', !ok);
     return ok;
+}
+
+function initQuoteFields() {
+    if (!els.premiumInput.value && !els.salePriceInput.value) {
+        els.premiumInput.value = '0.00';
+    }
+    syncQuoteFields();
+}
+
+function parseQuoteValue(value) {
+    if (typeof value !== 'string' || value.trim() === '') return NaN;
+    return parseFloat(value);
+}
+
+function formatMoney(value) {
+    return Number.isFinite(value) ? value.toFixed(2) : '';
+}
+
+function updatePremiumTone(value) {
+    els.premiumInput.classList.remove('premium-positive', 'premium-negative', 'premium-neutral');
+
+    if (!Number.isFinite(value) || value === 0) {
+        els.premiumInput.classList.add('premium-neutral');
+    } else if (value > 0) {
+        els.premiumInput.classList.add('premium-positive');
+    } else {
+        els.premiumInput.classList.add('premium-negative');
+    }
+}
+
+function updateSaleTone(isNeutral) {
+    els.salePriceInput.classList.toggle('sale-neutral', isNeutral);
+}
+
+function syncQuoteFields(options = {}) {
+    const { formatActive = false } = options;
+    const premiumRaw = els.premiumInput.value.trim();
+
+    if (quoteLastEdited === 'sale') {
+        const salePrice = parseQuoteValue(els.salePriceInput.value);
+
+        if (Number.isFinite(salePrice)) {
+            const premium = salePrice - remainingValueCNY;
+            els.premiumInput.value = formatMoney(premium);
+            if (formatActive) els.salePriceInput.value = formatMoney(salePrice);
+            updatePremiumTone(premium);
+            updateSaleTone(false);
+        } else {
+            els.premiumInput.value = '';
+            updatePremiumTone(NaN);
+            updateSaleTone(true);
+        }
+        return;
+    }
+
+    const premium = premiumRaw === '' ? 0 : parseQuoteValue(els.premiumInput.value);
+
+    if (Number.isFinite(premium)) {
+        const salePrice = remainingValueCNY + premium;
+        els.salePriceInput.value = formatMoney(salePrice);
+        if (formatActive) els.premiumInput.value = formatMoney(premium);
+        updatePremiumTone(premium);
+        updateSaleTone(premiumRaw === '' || premium === 0);
+    } else {
+        els.salePriceInput.value = '';
+        updatePremiumTone(NaN);
+        updateSaleTone(true);
+    }
 }
 
 function debounce(func, wait) {
@@ -393,7 +482,10 @@ function saveInputsToCookie() {
         currency: els.currency.value,
         cycle: Array.from(els.cycles).find(r => r.checked)?.value || "365",
         dueDate: els.dueDate.value,
-        customRate: els.customRate.value
+        customRate: els.customRate.value,
+        premium: els.premiumInput.value,
+        salePrice: els.salePriceInput.value,
+        quoteLastEdited
     };
     setCookie("vps_inputs", JSON.stringify(data), 0.5);
 }
@@ -407,6 +499,9 @@ function loadInputsFromCookie() {
             if(data.currency) els.currency.value = data.currency;
             if(data.dueDate) els.dueDate.value = data.dueDate;
             if(data.customRate) els.customRate.value = data.customRate;
+            if(data.premium) els.premiumInput.value = data.premium;
+            if(data.salePrice) els.salePriceInput.value = data.salePrice;
+            if(data.quoteLastEdited === 'sale' || data.quoteLastEdited === 'premium') quoteLastEdited = data.quoteLastEdited;
             if(data.cycle) {
                 const radio = document.querySelector(`input[name="cycle"][value="${data.cycle}"]`);
                 if(radio) radio.checked = true;
@@ -591,11 +686,13 @@ function calculate() {
 
     // 空 / 非法日期：清空结果区，给出占位提示
     if (isNaN(due.getTime()) || isNaN(trade.getTime())) {
+        remainingValueCNY = 0;
         setFinalValueDisplay('0.00');
         els.originalCurrencyValue.textContent = '请填写到期日 / 交易日';
         els.daysRemaining.textContent = '--';
         els.progressBar.style.width = '0%';
         els.progressText.textContent = '--';
+        syncQuoteFields();
         return;
     }
 
@@ -625,10 +722,12 @@ function calculate() {
     }
 
     els.progressBar.style.width = `${progressPct}%`;
+    remainingValueCNY = valCNY;
     setFinalValueDisplay(valCNY.toFixed(2));
     els.originalCurrencyValue.textContent = `≈ ${valOrig.toFixed(2)} ${els.currency.value}`;
     els.daysRemaining.textContent = diffDays > 0 ? diffDays : '0';
     els.progressText.textContent = `${displayProgressPct}%`;
+    syncQuoteFields();
 }
 
 function setFinalValueDisplay(value) {
@@ -644,6 +743,8 @@ function copyResult() {
     const days = els.daysRemaining.textContent;
     const valCNY = els.finalValue.textContent;
     const valOrig = els.originalCurrencyValue.textContent.replace('≈', '').trim().split(' ')[0];
+    const premium = els.premiumInput.value || '0.00';
+    const salePrice = els.salePriceInput.value || valCNY;
     const tradeDate = els.tradeDate.value;
     const dueDate = els.dueDate.value;
     
@@ -661,7 +762,8 @@ function copyResult() {
 - 💹 外币汇率：1 ${currency} ≈ ${rate} CNY
 - 💰 续费价格：${price} ${currency}/${cycleText}（约 ${cnyPrice} 元）
 - ⏳ 剩余天数：${days}天（${dueDate} 到期）
-- 💎 剩余价值：${valCNY}元（约 ${valOrig} ${currency}）`;
+- 💎 剩余价值：${valCNY}元（约 ${valOrig} ${currency}）
+- 🧾 溢价 / 售价：${premium}元 / ${salePrice}元`;
 
     const fallbackCopy = () => {
         const textArea = document.createElement("textarea");
